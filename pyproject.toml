@@ -1,6 +1,6 @@
 [project]
-name = "wissen"
-version = "0.3.0"
+name = "tidywise"
+version = "0.4.0"
 description = "Sort loose files on a Mac with a local AI model (Ollama) and make them findable for agents"
 readme = "README.md"
 license = "MIT"
@@ -8,14 +8,14 @@ requires-python = ">=3.12"
 dependencies = ["pypdf>=4"]
 
 [project.scripts]
-wissen = "wissen.__main__:main"
+tidywise = "tidywise.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["wissen"]
+packages = ["tidywise"]
 
 [tool.setuptools.package-data]
-wissen = ["default_config.toml"]
+tidywise = ["default_config.toml"]

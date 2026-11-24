@@ -1,0 +1,137 @@
+# Defaults for Tidywise. Your own settings live in ~/.config/tidywise/config.toml
+# and are created during setup in the app (or with `tidywise config init`).
+
+# Where files are sorted to. Topics/, Links/, Days/, _inbox/ and AGENTS.md are created here.
+root = "~/Downloads/Tidywise"
+
+# Where Tidywise looks. Only loose files directly in these folders – subfolders are never touched.
+watch = ["~/Downloads", "~/Documents", "~/Desktop"]
+
+# Leave a file alone until it has been unchanged for this many minutes.
+min_age_minutes = 60
+# false: suggestions only, you confirm. true: confident cases are moved automatically.
+auto_apply = false
+# Below this confidence (0–1) a file goes to _inbox/ instead of a topic.
+min_confidence = 0.6
+# Subfolders inside a topic: "none", "year" or "month".
+subfolders = "none"
+# How often the app checks while it is open (minutes).
+interval_minutes = 15
+skip_extensions = [".crdownload", ".download", ".part", ".partial", ".tmp", ".icloud", ".ds_store", ".localized"]
+
+# The local AI model (name as in `ollama pull`) and the address of Ollama.
+model = "gemma4:e4b-it-qat"
+ollama_url = "http://127.0.0.1:11434"
+# A sentence about you helps the model sort.
+profile = ""
+# The language summaries and keywords are written in – best the one you search in.
+summary_language = "English"
+
+# Read the Chrome history as a link collection. Off by default – you turn it on deliberately during setup.
+links_enabled = false
+chrome_profile = "Default"
+links_first_days = 14
+links_interval_minutes = 60
+
+# Let AI assistants (Claude Code, Codex, OpenCode, …) search the archive through `tidywise mcp`.
+# Read-only, and only while the Tidywise app is open. Off until you connect an assistant.
+mcp_enabled = false
+
+# Topics. slug = folder name. The model reads the description – the more specific, the better.
+[[topics]]
+slug = "personal-documents"
+name = "Personal documents"
+description = "IDs, passport, résumé, job applications, certificates, contracts, paperwork from authorities"
+symbol = "person.text.rectangle.fill"
+color = "orange"
+
+[[topics]]
+slug = "finance"
+name = "Finance"
+description = "Invoices, bank statements, transaction lists, taxes, insurance, receipts"
+symbol = "eurosign.circle.fill"
+color = "green"
+
+[[topics]]
+slug = "work"
+name = "Work"
+description = "Job: presentations, reports, meeting notes, documents from your employer, internal tools and portals"
+symbol = "briefcase.fill"
+color = "cyan"
+
+[[topics]]
+slug = "study"
+name = "Study & learning"
+description = "University, school, courses: lectures, scripts, term papers, exams, seminars, learning material"
+symbol = "graduationcap.fill"
+color = "blue"
+
+[[topics]]
+slug = "ai-and-development"
+name = "AI & development"
+description = "Programming, AI tools, LLMs, code snippets, HTML prototypes, docs, technical papers, dev tools and cloud services (GitHub, APIs, dashboards)"
+symbol = "chevron.left.forwardslash.chevron.right"
+color = "purple"
+
+[[topics]]
+slug = "software"
+name = "Software & installers"
+description = "Installers and archives of programs: .dmg, .pkg, installer .zip/.rar, plug-ins"
+symbol = "shippingbox.fill"
+color = "teal"
+
+[[topics]]
+slug = "photos-and-media"
+name = "Photos & media"
+description = "Photos, screenshots, videos, images without a clear link to another topic"
+symbol = "photo.fill"
+color = "yellow"
+
+[[topics]]
+slug = "music-and-audio"
+name = "Music & audio"
+description = "Music production, plug-ins, samples, audio files, sheet music"
+symbol = "music.note"
+color = "pink"
+
+[[topics]]
+slug = "games"
+name = "Games"
+description = "Games, ROMs, emulators, game installers, gaming sites and browser games, chess (Chess.com, Lichess)"
+symbol = "gamecontroller.fill"
+color = "red"
+
+[[topics]]
+slug = "shopping"
+name = "Shopping & price comparison"
+description = "Looking at and buying products: classifieds, eBay, Amazon, manufacturer product pages, price comparison, second-hand, order confirmations"
+symbol = "cart.fill"
+color = "brown"
+
+[[topics]]
+slug = "travel"
+name = "Travel & transport"
+description = "Trips, flights, trains, buses, hotels, tickets, restaurants and reservations, maps, sights, destinations"
+symbol = "airplane"
+color = "mint"
+
+[[topics]]
+slug = "social-and-entertainment"
+name = "Social media & entertainment"
+description = "X/Twitter, LinkedIn, Reddit, Instagram, YouTube videos, streaming, news, podcasts"
+symbol = "bubble.left.and.bubble.right.fill"
+color = "magenta"
+
+[[topics]]
+slug = "accounts-and-contracts"
+name = "Everyday, accounts & contracts"
+description = "Customer accounts, subscriptions, phone and energy contracts, comparison portals, identity checks, calendar, account settings at services"
+symbol = "key.fill"
+color = "slate"
+
+[[topics]]
+slug = "other"
+name = "Other"
+description = "Clearly doesn't fit anywhere else"
+symbol = "tray.fill"
+color = "gray"

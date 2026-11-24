@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "WissenApp",
+    name: "TidywiseApp",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "WissenApp",
-            path: "Sources/WissenApp",
+            name: "TidywiseApp",
+            path: "Sources/TidywiseApp",
             linkerSettings: [.linkedLibrary("sqlite3")]
         )
     ]

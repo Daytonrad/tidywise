@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from wissen import assistants, config, mcp
-from wissen.store import Store, now_iso
+from tidywise import assistants, config, mcp
+from tidywise.store import Store, now_iso
 
 
 class McpTest(unittest.TestCase):
@@ -20,7 +20,7 @@ class McpTest(unittest.TestCase):
         base = Path(self.dir.name)
         self.config_path, self.state = base / "config.toml", base / "state"
         raw = config.to_dict(config.load(base / "missing.toml"))
-        raw.update(root=str(base / "Wissen"), mcp_enabled=True)
+        raw.update(root=str(base / "Tidywise"), mcp_enabled=True)
         config.save(raw, self.config_path)
         patches = [mock.patch.object(config, "CONFIG_PATH", self.config_path),
                    mock.patch.object(config, "STATE_DIR", self.state)]
@@ -53,7 +53,7 @@ class McpTest(unittest.TestCase):
         answer = mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
                              "params": {"protocolVersion": "2025-06-18"}})
         self.assertEqual(answer["result"]["protocolVersion"], "2025-06-18")
-        self.assertEqual(answer["result"]["serverInfo"]["name"], "wissen")
+        self.assertEqual(answer["result"]["serverInfo"]["name"], "tidywise")
         unknown = mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}})
         self.assertIn(unknown["result"]["protocolVersion"], mcp.PROTOCOL_VERSIONS)
         self.assertIsNone(mcp.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}), "notifications get no answer")
@@ -118,9 +118,9 @@ class McpTest(unittest.TestCase):
 
 class AssistantsTest(unittest.TestCase):
     def test_manual_snippet_uses_the_common_format(self):
-        with mock.patch.dict(os.environ, {"WISSEN_CLI": "/bin/echo"}):
+        with mock.patch.dict(os.environ, {"TIDYWISE_CLI": "/bin/echo"}):
             snippet = json.loads(assistants.manual_snippet())
-        self.assertEqual(snippet, {"mcpServers": {"wissen": {"command": "/bin/echo", "args": ["mcp"]}}})
+        self.assertEqual(snippet, {"mcpServers": {"tidywise": {"command": "/bin/echo", "args": ["mcp"]}}})
 
     def test_unknown_assistant(self):
         with self.assertRaises(assistants.AssistantError):

@@ -1,9 +1,9 @@
 #!/bin/zsh
-# Installs Wissen: the Python part, the command line and the Mac app. The app then walks you through the
+# Installs Tidywise: the Python part, the command line and the Mac app. The app then walks you through the
 # rest (download the AI model, choose folders, topics, automation). Safe to run again, e.g. after `git pull`.
 #
 #   ./install.sh            everything
-#   ./install.sh --no-app   only the `wissen` command line (no Swift needed)
+#   ./install.sh --no-app   only the `tidywise` command line (no Swift needed)
 set -euo pipefail
 
 REPO="${0:A:h}"
@@ -14,7 +14,7 @@ WITH_APP=1
 say()  { print -P "%F{blue}→%f $1"; }
 fail() { print -P "%F{red}✗%f $1" >&2; exit 1; }
 
-[[ "$(uname)" == "Darwin" ]] || fail "Wissen only runs on macOS."
+[[ "$(uname)" == "Darwin" ]] || fail "Tidywise only runs on macOS."
 
 # --- Find Python ≥ 3.12 (the Python that ships with macOS is too old) ------------------------------
 PY=""
@@ -30,21 +30,21 @@ say "Python part ($("$PY" --version))"
 "$VENV/bin/pip" install -q --upgrade pip
 PYTHONWARNINGS=ignore "$VENV/bin/pip" install -q -e "$REPO"  # setuptools prints a harmless notice about editable installs
 
-say "Command line: ~/.local/bin/wissen"
+say "Command line: ~/.local/bin/tidywise"
 mkdir -p "$HOME/.local/bin"
-ln -sf "$VENV/bin/wissen" "$HOME/.local/bin/wissen"
+ln -sf "$VENV/bin/tidywise" "$HOME/.local/bin/tidywise"
 
 # The Claude skill is optional: only link it if Claude Code is used on this Mac.
 if [[ -d "$HOME/.claude" ]]; then
-  say "Claude skill: ~/.claude/skills/wissen"
+  say "Claude skill: ~/.claude/skills/tidywise"
   mkdir -p "$HOME/.claude/skills"
-  ln -sfn "$REPO/skill" "$HOME/.claude/skills/wissen"
+  ln -sfn "$REPO/skill" "$HOME/.claude/skills/tidywise"
 fi
 
 # If the background service is already set up, re-install it so it uses the current version.
-if launchctl print "gui/$(id -u)/local.wissen.agent" >/dev/null 2>&1; then
+if launchctl print "gui/$(id -u)/local.tidywise.agent" >/dev/null 2>&1; then
   say "Updating the background service"
-  "$VENV/bin/wissen" service install >/dev/null
+  "$VENV/bin/tidywise" service install >/dev/null
 fi
 
 if (( WITH_APP )); then
@@ -52,10 +52,10 @@ if (( WITH_APP )); then
   say "Building the Mac app (takes a minute or two the first time)"
   "$REPO/app/build.sh" --install
   print
-  print -P "%F{green}✓%f Done. Wissen is open and walks you through setup."
+  print -P "%F{green}✓%f Done. Tidywise is open and walks you through setup."
 else
   print
-  print -P "%F{green}✓%f Done. Next: wissen config init && wissen service install && wissen scan"
+  print -P "%F{green}✓%f Done. Next: tidywise config init && tidywise service install && tidywise scan"
   print "   (You then need Ollama and a model yourself: brew install ollama && ollama pull gemma4:e4b-it-qat)"
 fi
-case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) print "   Tip: ~/.local/bin is not in your PATH – add it to use the \`wissen\` command in the terminal." ;; esac
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) print "   Tip: ~/.local/bin is not in your PATH – add it to use the \`tidywise\` command in the terminal." ;; esac

@@ -1,8 +1,8 @@
 """Creates made-up sample data – for screenshots and for trying things out without touching real files.
 
-    .venv/bin/python scripts/demo.py /tmp/wissen-demo
-    WISSEN_CONFIG=/tmp/wissen-demo/config.toml WISSEN_STATE_DIR=/tmp/wissen-demo/state \\
-        app/build/Wissen.app/Contents/MacOS/Wissen --snapshot /tmp/wissen-demo/pictures
+    .venv/bin/python scripts/demo.py /tmp/tidywise-demo
+    TIDYWISE_CONFIG=/tmp/tidywise-demo/config.toml TIDYWISE_STATE_DIR=/tmp/tidywise-demo/state \\
+        app/build/Tidywise.app/Contents/MacOS/Tidywise --snapshot /tmp/tidywise-demo/pictures
 
 The app and the CLI then read only from that folder. Nothing is moved; the "files" exist only
 as entries in the database.
@@ -19,8 +19,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from wissen import config, telemetry  # noqa: E402
-from wissen.store import Store  # noqa: E402
+from tidywise import config, telemetry  # noqa: E402
+from tidywise.store import Store  # noqa: E402
 
 FILES = [
     # (name, topic, summary, keywords, confidence, folder, sorted … hours ago | None = suggestion)
@@ -74,12 +74,12 @@ def main() -> None:
         sys.exit(__doc__)
     base = Path(sys.argv[1]).expanduser().resolve()
     state = base / "state"
-    if (state / "wissen.sqlite").exists():
-        (state / "wissen.sqlite").unlink()
+    if (state / "tidywise.sqlite").exists():
+        (state / "tidywise.sqlite").unlink()
     home = Path.home()
 
     raw = config.to_dict(config.load(config.DEFAULT_CONFIG))
-    raw["root"] = "~/Wissen"  # a destination that doesn't exist yet, so the demo shows a fresh install
+    raw["root"] = "~/Tidywise"  # a destination that doesn't exist yet, so the demo shows a fresh install
     raw["links_enabled"] = True
     cfg = config.save(raw, base / "config.toml")
     cfg = dataclasses.replace(cfg, state_dir=state)
@@ -124,7 +124,7 @@ def main() -> None:
     con.commit()
     con.close()
     print(f"Sample data in {base}\n"
-          f"  WISSEN_CONFIG={base / 'config.toml'} WISSEN_STATE_DIR={state}")
+          f"  TIDYWISE_CONFIG={base / 'config.toml'} TIDYWISE_STATE_DIR={state}")
 
 
 if __name__ == "__main__":

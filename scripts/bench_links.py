@@ -2,7 +2,7 @@
 """Benchmark for link classification: compare quality and speed of different variants.
 
 Reference:
-  ~/Library/Application Support/wissen/bench/links_gold.jsonl  – real links, classified blind by hand
+  ~/Library/Application Support/tidywise/bench/links_gold.jsonl  – real links, classified blind by hand
       (stays local, not in the repo). Each line: title, domain, ok (list of allowed topics), split (dev|test)
   bench/links_edge_cases.jsonl – made-up edge cases (in the repo), using the slugs of the default topics
 
@@ -26,10 +26,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from wissen import chrome  # noqa: E402
-from wissen.__main__ import run_lock  # noqa: E402
-from wissen.config import load  # noqa: E402
-from wissen.store import Store  # noqa: E402
+from tidywise import chrome  # noqa: E402
+from tidywise.__main__ import run_lock  # noqa: E402
+from tidywise.config import load  # noqa: E402
+from tidywise.store import Store  # noqa: E402
 
 
 # The edge cases use the English default slugs. A configuration from before the switch to English uses

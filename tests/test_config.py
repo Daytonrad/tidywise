@@ -2,12 +2,13 @@
 
     .venv/bin/python -m unittest discover tests
 """
+import dataclasses
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
 
-from wissen import config, organize
+from tidywise import config, organize
 
 
 class ConfigTest(unittest.TestCase):
@@ -26,7 +27,7 @@ class ConfigTest(unittest.TestCase):
         self.assertFalse(raw["exists"])
         self.assertFalse(raw["links_enabled"], "browser history is off for new users")
         self.assertEqual(raw["topics"][-1]["slug"], "other")
-        fresh = config.to_dict(config._from_raw({**raw, "root": self.dir.name + "/Wissen"}), self.path)
+        fresh = config.to_dict(config._from_raw({**raw, "root": self.dir.name + "/Tidywise"}), self.path)
         self.assertEqual(fresh["folder_names"]["topics"], "Topics")
 
     def test_save_and_load_round_trip(self):
@@ -66,7 +67,7 @@ class LegacyInstallTest(unittest.TestCase):
 
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
-        self.root = Path(self.dir.name) / "Wissen"
+        self.root = Path(self.dir.name) / "Tidywise"
         self.path = Path(self.dir.name) / "config.toml"
         self.path.write_text(f'root = "{self.root}"\n'
                              '[[topics]]\nslug = "finanzen"\nname = "Finanzen"\n'
@@ -87,7 +88,7 @@ class LegacyInstallTest(unittest.TestCase):
     def test_existing_german_folders_are_kept(self):
         for name in ("Themen", "Tage", "_privat"):
             (self.root / name).mkdir(parents=True)
-        cfg = config.load(self.path)
+        cfg = dataclasses.replace(config.load(self.path), state_dir=Path(self.dir.name) / "state")  # never the real one
         self.assertEqual((cfg.topics_dir.name, cfg.days_dir.name, cfg.private_dir.name), ("Themen", "Tage", "_privat"))
         cfg.ensure_dirs()
         self.assertFalse((self.root / "Topics").exists(), "no English folders appear next to the German ones")
@@ -100,14 +101,14 @@ class LegacyInstallTest(unittest.TestCase):
 class DestinationTest(unittest.TestCase):
     def cfg(self, **changes):
         raw = config.to_dict(config.load(Path("/does/not/exist.toml")))
-        raw.update(root="/tmp/wissen-test-destination", **changes)
+        raw.update(root="/tmp/tidywise-test-destination", **changes)
         return config._from_raw(raw)
 
     def row(self, topic="finance", confidence=0.9):
         return {"topic": topic, "confidence": confidence, "name": "a.pdf", "mtime": datetime(2026, 3, 14).timestamp()}
 
     def test_subfolders(self):
-        root = Path("/tmp/wissen-test-destination")
+        root = Path("/tmp/tidywise-test-destination")
         self.assertEqual(organize.destination(self.cfg(), self.row()), root / "Topics/finance/a.pdf")
         self.assertEqual(organize.destination(self.cfg(subfolders="year"), self.row()), root / "Topics/finance/2026/a.pdf")
         self.assertEqual(organize.destination(self.cfg(subfolders="month"), self.row()),
@@ -115,7 +116,7 @@ class DestinationTest(unittest.TestCase):
 
     def test_unsure_or_unknown_goes_to_inbox(self):
         cfg = self.cfg(subfolders="year")
-        root = Path("/tmp/wissen-test-destination")
+        root = Path("/tmp/tidywise-test-destination")
         self.assertEqual(organize.destination(cfg, self.row(confidence=0.2)), root / "_inbox/a.pdf")
         for new in ("new", "neu"):
             self.assertEqual(organize.destination(cfg, self.row(topic=new)), root / "_inbox/a.pdf")

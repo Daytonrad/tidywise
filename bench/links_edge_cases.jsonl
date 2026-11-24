@@ -35,5 +35,5 @@
 {"title": "Dein Vodafone Vertrag – MeinVodafone", "domain": "vodafone.de", "ok": ["accounts-and-contracts"], "note": ""}
 {"title": "Kontoauszug November – Sparkasse", "domain": "sparkasse.de", "ok": ["finance"], "note": ""}
 {"title": "Hausarbeit Betriebswirtschaft – Abgabe | Uni-Moodle", "domain": "moodle.uni-beispiel.de", "ok": ["study"], "note": ""}
-{"title": "GitHub – floorianmb/wissen: lokales Wissensarchiv", "domain": "github.com", "ok": ["ai-and-development"], "note": ""}
+{"title": "GitHub – example/tidywise: sort loose files with a local model", "domain": "github.com", "ok": ["ai-and-development"], "note": ""}
 {"title": "Minecraft – Download", "domain": "minecraft.net", "ok": ["games", "software"], "note": ""}
