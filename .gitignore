@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.egg-info/
+*.sqlite
+*.jsonl
+.DS_Store
+.claude/
+
+app/.build/
+app/build/
+app/dist/
+!bench/links_edge_cases.jsonl

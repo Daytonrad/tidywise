@@ -1,0 +1,21 @@
+[project]
+name = "wissen"
+version = "0.3.0"
+description = "Sort loose files on a Mac with a local AI model (Ollama) and make them findable for agents"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = ["pypdf>=4"]
+
+[project.scripts]
+wissen = "wissen.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["wissen"]
+
+[tool.setuptools.package-data]
+wissen = ["default_config.toml"]
