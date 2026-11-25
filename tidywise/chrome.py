@@ -1,6 +1,7 @@
 """Read the Chrome history and store it as a classified link collection."""
 from __future__ import annotations
 
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -18,11 +19,13 @@ BATCH = 40
 NOISE_HOSTS = {
     "localhost", "127.0.0.1", "0.0.0.0", "accounts.google.com", "mail.google.com", "myaccount.google.com",
     "login.microsoftonline.com", "appleid.apple.com", "idmsa.apple.com", "consent.google.com",
-    "consent.youtube.com", "newtab", "www.google.com/sorry",
+    "consent.youtube.com", "newtab",
 }
 NOISE_HOST_PREFIXES = ("accounts.", "login.", "signin.", "signup.", "auth.", "sso.", "id.", "mail.", "consent.")
 NOISE_PATH_PARTS = ("/login", "/signin", "/sign-in", "/logout", "/oauth", "/auth/", "/callback", "/sso", "/2fa", "/verify")
-SEARCH_HOSTS = ("google.", "bing.com", "duckduckgo.com", "ecosia.org", "search.brave.com")
+SEARCH_DOMAINS = ("bing.com", "duckduckgo.com", "ecosia.org", "search.brave.com")  # including subdomains
+# Google's own search hosts (www.google.de, images.google.co.uk, maps.google.com …) – not developers.google.com & co.
+GOOGLE_SEARCH_HOST = re.compile(r"^(?:(?:www|images|news|maps|books|scholar|shopping|video)\.)?google\.(?:com?\.)?[a-z]{2,3}$")
 # Pages without content of their own: bot checks, logins, redirects, mailboxes (English and German titles)
 NOISE_TITLES = (
     "just a moment", "nur einen moment", "einen moment", "security checkpoint", "attention required",
@@ -52,6 +55,10 @@ def history_path(cfg: Config) -> Path:
     return Path.home() / "Library/Application Support/Google/Chrome" / cfg.chrome_profile / "History"
 
 
+def _is_search_host(host: str) -> bool:
+    return bool(GOOGLE_SEARCH_HOST.match(host)) or any(host == d or host.endswith("." + d) for d in SEARCH_DOMAINS)
+
+
 def _normalize(url: str) -> str | None:
     try:
         s = urlsplit(url)
@@ -65,9 +72,9 @@ def _normalize(url: str) -> str | None:
     path = s.path.lower()
     if any(part in path for part in NOISE_PATH_PARTS):
         return None
-    if any(h in host for h in SEARCH_HOSTS):
-        if path.startswith(("/search", "/url", "/aclk", "/maps/dir")):
-            return None  # searches are stored separately in 'searches'; redirects and routes are noise
+    if _is_search_host(host):
+        if path.startswith(("/search", "/url", "/aclk", "/maps/dir", "/sorry")):
+            return None  # searches are stored separately in 'searches'; redirects, bot checks and routes are noise
         if path.startswith("/maps/place/"):  # one entry per place instead of per map view
             place = s.path.split("/")[3] if len(s.path.split("/")) > 3 else ""
             return urlunsplit((s.scheme, s.netloc, f"/maps/place/{place}", "", ""))
@@ -220,23 +227,35 @@ def sync(cfg: Config, store: Store, verbose: bool = True, force: bool = False) -
 
     known = {u for u in fresh if store.link(u)}
     new = [u for u in fresh if u not in known]
-    for u in known:
-        t, d, f, l, c = fresh[u]
+    # Store every visit and search together with the new read position in one go: an interrupted run then
+    # neither loses visits nor counts them twice. Topics follow below; untagged links are caught up later.
+    for u, (t, d, f, l, c) in fresh.items():
         store.upsert_link(u, t, d, None, f, l, c)
-    store.commit()  # don't hold a write lock while the model is working
-
-    topics = classify_pairs(cfg, [(fresh[u][0], fresh[u][1]) for u in new], "Sorting history", verbose, store)
-    for u in new:
-        t, d, f, l, c = fresh[u]
-        store.upsert_link(u, t, d, topics.get((t, d)), f, l, c)
-    store.commit()
-
     for term, at in searches:
         term = (term or "").strip()
         if term:
             store.add_search(term, chrome_to_dt(at).isoformat(timespec="seconds"))
-
     store.set_meta("chrome_last_visit", str(max_visit))
+    store.commit()  # don't hold a write lock while the model is working
+
+    by_pair: dict[tuple[str, str], list[str]] = {}
+    for u in new:
+        t, d, *_ = fresh[u]
+        by_pair.setdefault((t, d), []).append(u)
+
+    def save_batch(done: dict[tuple[str, str], str | None]) -> None:
+        for pair, topic in done.items():
+            if topic:
+                for u in by_pair.get(pair, ()):
+                    store.db.execute("UPDATE links SET topic=? WHERE url=? AND topic IS NULL", (topic, u))
+        store.commit()
+
+    topics = classify_pairs(cfg, list(by_pair), "Sorting history", verbose, store, on_batch=save_batch)
+    save_batch(topics)  # including the reused topics of known pairs
+
+    if None not in topics.values():  # also catch up links left untagged after an interruption or Ollama outage
+        reclassify_missing(cfg, store, verbose=verbose)
+
     store.set_meta("chrome_last_run", now_iso())
     store.commit()
     return len(new), len(searches)

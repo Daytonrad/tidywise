@@ -73,7 +73,7 @@ struct MenuBarView: View {
                 .buttonStyle(.borderedProminent)
                 Button { state.scan() } label: { Image(systemName: "arrow.clockwise") }
                     .help("Check for new files")
-                    .disabled(!state.canRunAI || !state.modelInstalled)
+                    .disabled(!state.canScan)
                 Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
                     .help("Quit Tidywise – then nothing is sorted in the background either")
             }

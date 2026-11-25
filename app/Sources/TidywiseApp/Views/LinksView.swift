@@ -33,13 +33,15 @@ struct LinksView: View {
                 .fixedSize()
                 Button { state.syncLinks() } label: { Label("Read history", systemImage: "clock.arrow.circlepath") }
                     .help(state.aiEnabled ? "Check your Chrome history for new pages now" : "AI is off")
-                    .disabled(!state.canRunAI || !state.config.linksEnabled || !state.modelInstalled)
+                    .disabled(!state.canScan || !state.config.linksEnabled)
             }
             .padding(.horizontal, DS.pagePadding)
             .padding(.top, DS.pagePadding)
 
             if mode == .pages {
-                FilterChips(chips: [FilterChip(id: nil, title: "All", count: matching.count)] + state.config.topics.compactMap { t in
+                let known = Set(state.config.topics.map(\.slug))
+                let extraTopics = Set(counts.keys).subtracting(known).filter { !$0.isEmpty }.sorted().map { Topic(slug: $0, name: $0) }
+                FilterChips(chips: [FilterChip(id: nil, title: "All", count: matching.count)] + (state.config.topics + extraTopics).compactMap { t in
                     guard let n = counts[t.slug], n > 0 else { return nil }
                     return FilterChip(id: t.slug, title: t.name, count: n,
                                       symbol: TopicStyle.of(t.slug).symbol, color: TopicStyle.of(t.slug).color)
@@ -71,7 +73,7 @@ struct LinksView: View {
                        text: state.chromeBlocked
                            ? "Tidywise isn't allowed to read your Chrome history. Settings shows you how to allow access."
                            : "Your Chrome history is read regularly as soon as the AI is ready.",
-                       actionTitle: state.chromeBlocked ? "Allow access" : (state.canRunAI && state.modelInstalled ? "Read now" : nil)) {
+                       actionTitle: state.chromeBlocked ? "Allow access" : (state.canScan ? "Read now" : nil)) {
                 if state.chromeBlocked { state.openSettings(.general) } else { state.syncLinks() }
             }
         } else if links.isEmpty {

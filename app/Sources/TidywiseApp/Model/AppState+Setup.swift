@@ -237,20 +237,42 @@ extension AppState {
         setupRequested = true
     }
 
-    /// Finishes setup: save the settings, set up automation if wanted, check once.
-    func finishSetup(_ draft: TidywiseConfig, automation: Bool) {
+    /// Finishes setup: save the settings, apply login/automation choices, check once.
+    func finishSetup(_ draft: TidywiseConfig, automation: Bool, launchAtLogin: Bool) {
+        guard !finishingSetup else { return }
+        finishingSetup = true
+        Task {
+            var draft = draft
+            // An assistant connected in the terminal before setup (`tidywise mcp add`) may search right away.
+            if !config.exists, !draft.mcpEnabled,
+               let status = await Task.detached(operation: { Sources.assistants() }).value {
+                assistants = status
+                if status.clients.contains(where: \.connected) { draft.mcpEnabled = true }
+            }
+            finishingSetup = false
+            completeSetup(draft, automation: automation, launchAtLogin: launchAtLogin)
+        }
+    }
+
+    private func completeSetup(_ draft: TidywiseConfig, automation: Bool, launchAtLogin: Bool) {
         saveConfig(draft) { [self] ok in
             guard ok else { return }
+            if launchAtLogin != self.launchAtLogin { setLaunchAtLogin(launchAtLogin) }
             setupRequested = false
             page = .home
             Task {
                 if automation, !service.loaded {
-                    _ = await Shell.runAsync(Paths.cli.path, ["service", "install"])
+                    let r = await Shell.runAsync(Paths.cli.path, ["service", "install"])
+                    if !r.ok {
+                        result = CommandResult(title: "Set up automation",
+                                               output: r.output.trimmingCharacters(in: .whitespacesAndNewlines),
+                                               failed: true)
+                    }
                 } else if !automation, service.loaded {
                     _ = await Shell.runAsync(Paths.cli.path, ["service", "uninstall"])
                 }
                 await refreshAll()
-                if ollamaUp, modelInstalled { scan() }
+                if canScan { scan() }
             }
         }
     }

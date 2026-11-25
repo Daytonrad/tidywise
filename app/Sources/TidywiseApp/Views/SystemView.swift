@@ -55,7 +55,7 @@ struct SystemView: View {
             Spacer(minLength: 0)
             if loaded {
                 Button { state.runServiceNow() } label: { Label("Run now", systemImage: "play.fill") }
-                    .disabled(!state.canRunAI || !state.modelInstalled)
+                    .disabled(!state.canScan)
                     .help("Start a full run")
             } else {
                 Button { state.installService() } label: { Label("Set up automation", systemImage: "plus.circle") }
@@ -236,7 +236,7 @@ struct SystemView: View {
 
     private var callsTable: some View {
         Table(Array(state.calls.prefix(300))) {
-            TableColumn("Time") { c in Text(c.at.formatted(date: .omitted, time: .standard)).monospacedDigit().foregroundStyle(.secondary) }
+            TableColumn("Time") { c in Text(c.at.formatted(Date.FormatStyle(date: .omitted, time: .standard).locale(Format.locale))).monospacedDigit().foregroundStyle(.secondary) }
                 .width(70)
             TableColumn("Type") { c in
                 Label(c.kindLabel, systemImage: c.kind == "links" ? "link" : "doc")

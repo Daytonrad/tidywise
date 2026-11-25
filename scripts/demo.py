@@ -101,7 +101,7 @@ def main() -> None:
                               moved_at=(now - timedelta(hours=hours)).isoformat(timespec="seconds"))
     for i, (title, domain, topic) in enumerate(LINKS):
         at = (now - timedelta(hours=3 + i * 7)).isoformat(timespec="seconds")
-        store.upsert_link(f"https://{domain}/beispiel-{i}", title, domain, topic, at, at, random.randint(1, 6))
+        store.upsert_link(f"https://{domain}/example-{i}", title, domain, topic, at, at, random.randint(1, 6))
     for i, term in enumerate(SEARCHES):
         store.add_search(term, (now - timedelta(hours=4 + i * 9)).isoformat(timespec="seconds"))
     store.set_meta("agent_last_run", (now - timedelta(minutes=6)).isoformat(timespec="seconds"))

@@ -61,6 +61,11 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config.slugify("  Straße/Größe  "), "strasse-groesse")
         self.assertEqual(config.slugify("???"), "topic")
 
+    def test_short_path_requires_boundary(self):
+        home = str(Path.home())
+        self.assertEqual(config.short_path(home + "/Downloads/a.pdf"), "~/Downloads/a.pdf")
+        self.assertEqual(config.short_path(home + "extra/a.pdf"), home + "extra/a.pdf")
+
 
 class LegacyInstallTest(unittest.TestCase):
     """Installs from before the switch to English keep their German topic and folder names."""

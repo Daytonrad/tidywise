@@ -10,7 +10,9 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-TEXTUTIL_EXT = {".docx", ".doc", ".rtf", ".rtfd", ".odt", ".html", ".htm", ".webarchive", ".pages"}
+from .config import short_path
+
+TEXTUTIL_EXT = {".docx", ".doc", ".rtf", ".rtfd", ".odt", ".html", ".htm", ".webarchive"}
 PLAIN_EXT = {
     ".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".yaml", ".yml", ".toml", ".py", ".js", ".ts", ".tsx",
     ".jsx", ".css", ".sh", ".swift", ".java", ".c", ".cpp", ".h", ".go", ".rs", ".sql", ".log", ".tex", ".ini",
@@ -91,7 +93,7 @@ def text_excerpt(p: Path) -> str:
         if ext == ".pdf":
             return _pdf_text(p)
         if ext in TEXTUTIL_EXT:
-            r = _run(["textutil", "-convert", "txt", "-stdout", str(p)])
+            r = _run(["textutil", "-noload", "-convert", "txt", "-stdout", str(p)])
             return _clean(r.stdout.decode("utf-8", errors="replace")) if r.returncode == 0 else ""
         if ext == ".pptx":
             return _office_xml_text(p, "ppt/slides/slide")
@@ -132,7 +134,7 @@ def describe(p: Path) -> tuple[dict, list[str]]:
         "filename": p.name,
         "extension": ext or "(none)",
         "size": human_size(st.st_size),
-        "folder": str(p.parent).replace(str(Path.home()), "~"),
+        "folder": short_path(p.parent),
         "created": datetime.fromtimestamp(getattr(st, "st_birthtime", st.st_mtime)).strftime("%Y-%m-%d"),
     }
     sources = where_froms(p)

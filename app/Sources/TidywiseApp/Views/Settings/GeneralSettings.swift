@@ -23,10 +23,16 @@ struct AccessCard: View {
             HStack(spacing: 8) {
                 Button("Open System Settings") { state.openFullDiskAccessSettings() }.buttonStyle(.borderedProminent)
                 Button("Show helper program in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: state.helperPath ?? "")])
+                    if let path = state.helperPath, !path.isEmpty {
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                    }
                 }
-                Button { state.copyToClipboard(state.helperPath ?? "") } label: { Label("Copy path", systemImage: "doc.on.doc") }
+                .disabled((state.helperPath ?? "").isEmpty)
+                Button {
+                    if let path = state.helperPath, !path.isEmpty { state.copyToClipboard(path) }
+                } label: { Label("Copy path", systemImage: "doc.on.doc") }
                     .buttonStyle(.borderless)
+                    .disabled((state.helperPath ?? "").isEmpty)
                     .help(state.helperPath ?? "")
             }
             Text("The helper program is Python – it runs the part of Tidywise that reads and moves the files. None of it leaves your Mac.")

@@ -9,7 +9,7 @@ struct ReviewView: View {
             if state.planned.isEmpty && state.inbox.isEmpty {
                 EmptyState(symbol: "checkmark", title: "Nothing to review",
                            text: "New loose files show up here\(state.config.minAgeMinutes < 1 ? "" : " once they've been unchanged for \(state.config.minAgeText)"). Last checked \(Format.relative(state.lastRun)).",
-                           actionTitle: state.canRunAI ? "Check for new files" : nil) { state.scan() }
+                           actionTitle: state.canScan ? "Check for new files" : nil) { state.scan() }
                     .card(padding: 0)
             }
 

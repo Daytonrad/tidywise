@@ -98,7 +98,7 @@ struct TopicSettings: View {
         guard let topic = deleting else { return "" }
         let files = fileCount(topic.slug)
         if files == 0 { return "Tidywise will then stop sorting anything into this topic." }
-        return "\(files == 1 ? "1 file stays" : "\(files) files stay") in the folder “\(topic.slug)” – nothing is deleted. Tidywise just won't sort anything new there."
+        return "\(files == 1 ? "1 file stays" : "\(files.formatted(Format.integer)) files stay") in the folder “\(topic.slug)” – nothing is deleted. Tidywise just won't sort anything new there."
     }
 
     private func startNew() {
@@ -237,14 +237,14 @@ struct TopicEditor: View {
 /// For setup: select and deselect topics as tiles, add your own.
 struct TopicChooser: View {
     @Binding var config: TidywiseConfig
-    /// All topics available to choose from (suggestions plus your own), in a fixed order.
-    @ViewState private var pool: [Topic] = []
+    /// All topics available to choose from (suggestions plus your own), owned by SetupView so Back/Continue keeps them.
+    @Binding var pool: [Topic]
     @ViewState private var adding = false
     @ViewState private var draft = Topic(slug: "", name: "")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 10)], spacing: 10) {
                 ForEach(pool.filter { !$0.isFallback }) { tile($0) }
             }
             if adding {

@@ -303,7 +303,10 @@ struct TopicsSection: View {
     var body: some View {
         let fileCounts = Dictionary(grouping: state.moved.filter { !$0.isInInbox }, by: { $0.topic ?? "" }).mapValues(\.count)
         let linkCounts = Dictionary(grouping: state.links, by: { $0.topic ?? "" }).mapValues(\.count)
-        let entries = state.config.topics
+        let known = Set(state.config.topics.map(\.slug))
+        let orphanSlugs = Set(fileCounts.keys).union(linkCounts.keys).subtracting(known).filter { !$0.isEmpty }.sorted()
+        let allTopics = state.config.topics + orphanSlugs.map { Topic(slug: $0, name: $0) }
+        let entries = allTopics
             .map { Entry(topic: $0, files: fileCounts[$0.slug] ?? 0, links: linkCounts[$0.slug] ?? 0) }
             .filter { $0.files + $0.links > 0 }
             .sorted { ($0.files, $0.links) > ($1.files, $1.links) }
@@ -334,7 +337,7 @@ struct TopicsSection: View {
 
     private func caption(_ files: Int, _ links: Int) -> String {
         var parts: [String] = []
-        if files > 0 { parts.append(files == 1 ? "1 file" : "\(files) files") }
+        if files > 0 { parts.append(files == 1 ? "1 file" : "\(files.formatted(Format.integer)) files") }
         if links > 0 { parts.append(links == 1 ? "1 link" : "\(links.formatted(Format.integer)) links") }
         return parts.joined(separator: " · ")
     }

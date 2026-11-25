@@ -21,9 +21,17 @@ struct FilesView: View {
         var result: [Group] = []
         let inbox = matching.filter(\.isInInbox)
         if !inbox.isEmpty { result.append(Group(slug: "_inbox", name: "Inbox", files: inbox)) }
+        var known = Set<String>()
         for t in state.config.topics {
+            known.insert(t.slug)
             let files = matching.filter { $0.topic == t.slug && !$0.isInInbox }
             if !files.isEmpty { result.append(Group(slug: t.slug, name: t.name, files: files)) }
+        }
+        // Keep files whose topic was removed from Settings visible and editable.
+        let orphanSlugs = Set(matching.filter { !$0.isInInbox }.compactMap(\.topic)).subtracting(known).sorted()
+        for slug in orphanSlugs {
+            let files = matching.filter { $0.topic == slug && !$0.isInInbox }
+            if !files.isEmpty { result.append(Group(slug: slug, name: slug, files: files)) }
         }
         return result
     }
@@ -178,7 +186,7 @@ struct FileDetail: View {
                     }
                     InfoRow("Previously in", Paths.folderName(of: file.origPath))
                     InfoRow("Now in", Paths.short(URL(fileURLWithPath: file.curPath ?? file.origPath).deletingLastPathComponent().path))
-                    InfoRow("Sorted", file.movedAt?.formatted(date: .abbreviated, time: .shortened) ?? "–")
+                    InfoRow("Sorted", file.movedAt?.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(Format.locale)) ?? "–")
                 }
                 .font(.callout)
             }

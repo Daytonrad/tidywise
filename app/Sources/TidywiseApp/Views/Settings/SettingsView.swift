@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// All settings, in five sections. Every change applies immediately – there is no “Save” button.
+/// All settings, in six sections. Every change applies immediately – there is no “Save” button.
 /// The sections use the same building blocks as setup.
 struct SettingsView: View {
     @Environment(AppState.self) private var state

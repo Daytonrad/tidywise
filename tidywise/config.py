@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -128,10 +129,14 @@ class Config:
             return
         for f in old.iterdir():
             if f.name not in ("agent.lock", ".DS_Store"):
-                f.rename(self.state_dir / f.name)
+                shutil.move(str(f), str(self.state_dir / f.name))
         for f in old.iterdir():
-            f.unlink()
-        old.rmdir()
+            if f.is_file() or f.is_symlink():
+                f.unlink()
+        try:
+            old.rmdir()
+        except OSError:
+            pass
 
 
 # --- Topics ---------------------------------------------------------------------------------------
@@ -269,11 +274,16 @@ def load(path: Path | None = None) -> Config:
 
 # --- Writing --------------------------------------------------------------------------------------
 
-def _short(p: Path) -> str:
+def short_path(p: str | os.PathLike | None) -> str:
     """Write paths inside the home folder with ~ – easier to read and portable to another Mac."""
+    if not p:
+        return ""
     home = str(Path.home())
     s = str(p)
     return "~" + s[len(home):] if s == home or s.startswith(home + "/") else s
+
+
+_short = short_path
 
 
 def _q(s: str) -> str:

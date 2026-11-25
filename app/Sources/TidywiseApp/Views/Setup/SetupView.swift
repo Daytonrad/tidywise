@@ -6,8 +6,10 @@ import SwiftUI
 struct SetupView: View {
     @Environment(AppState.self) private var state
     @ViewState private var draft = TidywiseConfig()
+    @ViewState private var topicPool: [Topic] = []
     @ViewState private var prepared = false
     @ViewState private var automation = true
+    @ViewState private var launchAtLogin = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,7 +43,9 @@ struct SetupView: View {
         guard !prepared, state.configLoaded, state.cliInstalled else { return }
         prepared = true
         draft = state.config
+        topicPool = state.config.topics
         automation = state.config.exists ? state.service.loaded : true
+        launchAtLogin = state.launchAtLogin
         if !state.config.exists, !state.isInstalled(draft.model) {
             draft.model = ModelCatalog.recommended(ramBytes: state.memoryTotal).tag
         }
@@ -79,11 +83,11 @@ struct SetupView: View {
             WatchFoldersEditor(config: $draft)
             DestinationEditor(config: $draft)
         case .topics:
-            TopicChooser(config: $draft)
+            TopicChooser(config: $draft, pool: $topicPool)
         case .automation:
             SettingsCard {
                 SettingToggle(symbol: "clock.arrow.circlepath", title: "Check regularly",
-                              on: "On: Tidywise checks for new files every \(draft.intervalMinutes) minutes while the app is open.",
+                              on: "On: Tidywise checks for new files \(AppState.intervalText(minutes: draft.intervalMinutes)) while the app is open.",
                               off: "Off: Tidywise only checks when you click “Check for new files”.",
                               isOn: $automation)
                 Divider()
@@ -100,7 +104,7 @@ struct SetupView: View {
                 SettingToggle(symbol: "power", title: "Start at login",
                               on: "On: Tidywise starts with your Mac in the menu bar.",
                               off: "Off: Tidywise only works once you open the app.",
-                              isOn: Binding(get: { state.launchAtLogin }, set: { state.setLaunchAtLogin($0) }))
+                              isOn: $launchAtLogin)
             }
             if automation || draft.linksEnabled { AccessCard(urgent: false) }
         }
@@ -118,10 +122,10 @@ struct SetupView: View {
             Spacer()
             if let hint { Text(hint).font(.callout).foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(.trailing) }
             if state.setupStep == .automation {
-                Button { state.finishSetup(draft, automation: automation) } label: { Text("Done").frame(minWidth: 90) }
+                Button { state.finishSetup(draft, automation: automation, launchAtLogin: launchAtLogin) } label: { Text("Done").frame(minWidth: 90) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(state.pendingSaves > 0)
+                    .disabled(state.pendingSaves > 0 || state.finishingSetup)
             } else {
                 Button { move(1) } label: { Text(state.setupStep == .welcome ? "Get started" : "Continue").frame(minWidth: 90) }
                     .buttonStyle(.borderedProminent)

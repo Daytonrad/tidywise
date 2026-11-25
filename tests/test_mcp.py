@@ -89,6 +89,23 @@ class McpTest(unittest.TestCase):
         self.assertIn("No matches", self.call("search", query="lisbon", kind="files")[0])
         self.assertIn("No matches", self.call("search", query="invoice", topic="travel")[0])
 
+    def test_inbox_files_are_separated_from_topic_counts_and_filter(self):
+        self.open_app()
+        store = Store(self.cfg.db_path)
+        fid = store.add_planned(
+            orig_path="/tmp/unsure.pdf", name="Unsure_bill.pdf", ext=".pdf", size=1, mtime=1.0,
+            topic="finance", new_topic=None, summary="Unclear bill.", keywords=["bill"], source_url=None, confidence=0.2,
+        )
+        store.update_file(fid, status="moved", moved_at=now_iso(), cur_path=str(self.cfg.inbox_dir / "Unsure_bill.pdf"))
+        store.commit()
+        store.db.close()
+
+        topics_text, _ = self.call("topics")
+        self.assertIn("finance · Finance — 1 files", topics_text)
+        self.assertIn("_inbox · Inbox — 1 files", topics_text)
+        self.assertIn("No matches", self.call("search", query="Unsure_bill", topic="finance")[0])
+        self.assertIn("Unsure_bill.pdf", self.call("search", query="Unsure_bill", topic="_inbox")[0])
+
     def test_search_treats_wildcards_as_text(self):
         self.open_app()
         self.assertIn("Invoice_hosting.pdf", self.call("search", query="100%")[0])
@@ -125,6 +142,20 @@ class AssistantsTest(unittest.TestCase):
     def test_unknown_assistant(self):
         with self.assertRaises(assistants.AssistantError):
             assistants.connect("nope")
+
+    def test_opencode_jsonc_ignores_comments_and_names_actual_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            json_path = Path(td) / "opencode.json"
+            jsonc_path = Path(td) / "opencode.jsonc"
+            oc = assistants.OpenCode("opencode", "OpenCode", "opencode")
+            oc.configs = [json_path, jsonc_path]
+            jsonc_path.write_text('// "tidywise" commented out\n{"mcp": {}}\n')
+            self.assertFalse(oc.connected())
+            jsonc_path.write_text('// active\n{"mcp": {"tidywise": {"command": ["tidywise", "mcp"]}}}\n')
+            self.assertTrue(oc.connected())
+            with self.assertRaises(assistants.AssistantError) as ctx:
+                oc.remove("/usr/bin/true")
+            self.assertIn("opencode.jsonc", str(ctx.exception))
 
 
 if __name__ == "__main__":

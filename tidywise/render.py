@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
-from .config import Config
+from .config import Config, Topic, short_path
 from .store import Store
 
 RECENT_DAYS = 14
@@ -20,6 +20,17 @@ def _write(path: Path, text: str) -> None:
         path.write_text(text, encoding="utf-8")
 
 
+def _remove_stale(path: Path, header: str) -> None:
+    """Delete a file this module wrote earlier (recognised by its first line) – never a note of the user's."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            first = f.readline()
+    except (OSError, UnicodeDecodeError):
+        return
+    if first.startswith(header):
+        path.unlink(missing_ok=True)
+
+
 def _rel(cfg: Config, p: str | Path) -> str:
     try:
         return quote(str(Path(p).relative_to(cfg.root)))
@@ -29,6 +40,14 @@ def _rel(cfg: Config, p: str | Path) -> str:
 
 def _md(s: str | None) -> str:
     return (s or "").replace("|", "/").replace("\n", " ").strip()
+
+
+def _md_label(s: str | None) -> str:
+    return _md(s).replace("[", "\\[").replace("]", "\\]")
+
+
+def _md_url(url: str) -> str:
+    return url.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
 
 
 def _day(iso: str | None) -> str:
@@ -52,21 +71,32 @@ def render(cfg: Config, store: Store) -> None:
     for r in links:
         links_by_topic[r["topic"]].append(r)
 
-    # Topics/<slug>/_index.md
-    for t in cfg.topics:
+    # Topics/<slug>/_index.md (keep rendering removed topics that still hold sorted files)
+    known_slugs = {t.slug for t in cfg.topics}
+    extra_slugs = sorted((set(files_by_topic) | set(links_by_topic)) - known_slugs - {"_inbox", None, ""})
+    all_topics = list(cfg.topics) + [Topic(slug=s, name=s) for s in extra_slugs]
+    active_topic_slugs = {t.slug for t in all_topics}
+
+    for t in all_topics:
         rows = files_by_topic.get(t.slug, [])
-        lines = [f"# {t.name}", "", f"_{t.description}_", "",
-                 f"Links on this topic: [{links_name}/{t.slug}.md](../../{links_name}/{t.slug}.md) ({len(links_by_topic.get(t.slug, []))})", ""]
+        if t.slug not in known_slugs and not rows:
+            continue
+        lines = [f"# {t.name}", ""] + ([f"_{t.description}_", ""] if t.description else []) + [
+            f"Links on this topic: [{links_name}/{t.slug}.md](../../{links_name}/{t.slug}.md) ({len(links_by_topic.get(t.slug, []))})", ""]
         if rows:
             lines += ["| Date | File | What it's about | Keywords | Source |", "|---|---|---|---|---|"]
             for r in rows:
-                src = f"[Link]({r['source_url']})" if r["source_url"] else ""
+                src = f"[Link]({_md_url(r['source_url'])})" if r["source_url"] else ""
                 link = quote(os.path.relpath(r["cur_path"], cfg.topics_dir / t.slug))  # also from year subfolders
-                lines.append(f"| {_day(r['moved_at'])} | [{_md(r['name'])}]({link}) | "
+                lines.append(f"| {_day(r['moved_at'])} | [{_md_label(r['name'])}]({link}) | "
                              f"{_md(r['summary'])} | {_md(r['keywords'])} | {src} |")
         else:
             lines.append("_No files yet._")
         _write(cfg.topics_dir / t.slug / "_index.md", "\n".join(lines) + "\n")
+
+    for p in cfg.topics_dir.glob("*/_index.md"):
+        if p.parent.name not in active_topic_slugs or (p.parent.name not in known_slugs and not files_by_topic.get(p.parent.name)):
+            _remove_stale(p, "# ")
 
     # _inbox/_index.md
     rows = files_by_topic.get("_inbox", [])
@@ -75,7 +105,8 @@ def render(cfg: Config, store: Store) -> None:
              "| No. | File | Suggestion | Confidence | What it's about |", "|---|---|---|---|---|"]
     for r in rows:
         suggestion = r["new_topic"] and f"new: {r['new_topic']}" or r["topic"]
-        lines.append(f"| {r['id']} | [{_md(r['name'])}]({quote(r['name'])}) | {_md(suggestion)} | "
+        actual_name = Path(r["cur_path"]).name if r["cur_path"] else r["name"]
+        lines.append(f"| {r['id']} | [{_md_label(r['name'])}]({quote(actual_name)}) | {_md(suggestion)} | "
                      f"{(r['confidence'] or 0):.1f} | {_md(r['summary'])} |")
     _write(cfg.inbox_dir / "_index.md", "\n".join(lines) + "\n")
 
@@ -89,8 +120,11 @@ def render(cfg: Config, store: Store) -> None:
                 lines += ["", f"## {m}"]
                 month = m
             visits = f" ({r['visits']}×)" if (r["visits"] or 0) > 1 else ""
-            lines.append(f"- {_day(r['last_visit'])} [{_md(r['title'])}]({r['url']}) – {r['domain']}{visits}")
+            lines.append(f"- {_day(r['last_visit'])} [{_md_label(r['title'])}]({_md_url(r['url'])}) – {r['domain']}{visits}")
         _write(cfg.links_dir / f"{slug}.md", "\n".join(lines) + "\n")
+    for p in cfg.links_dir.glob("*.md"):
+        if p.stem not in links_by_topic:
+            _remove_stale(p, "# Links: ")
 
     # Days/YYYY-MM-DD.md
     by_day_files = defaultdict(list)
@@ -102,12 +136,13 @@ def render(cfg: Config, store: Store) -> None:
     by_day_search = defaultdict(list)
     for r in searches:
         by_day_search[_day(r["at"])].append(r["term"])
-    for day in set(by_day_files) | set(by_day_links) | set(by_day_search):
+    active_days = set(by_day_files) | set(by_day_links) | set(by_day_search)
+    for day in active_days:
         lines = [f"# {day}", ""]
         if by_day_files.get(day):
             lines.append("## Files sorted")
             for r in by_day_files[day]:
-                lines.append(f"- [{_md(r['name'])}](../{_rel(cfg, r['cur_path'])}) – {_md(r['summary'])}")
+                lines.append(f"- [{_md_label(r['name'])}](../{_rel(cfg, r['cur_path'])}) – {_md(r['summary'])}")
             lines.append("")
         if by_day_search.get(day):
             lines.append("## Searched for")
@@ -121,17 +156,19 @@ def render(cfg: Config, store: Store) -> None:
             for slug, rs in sorted(grouped.items(), key=lambda kv: -len(kv[1])):
                 lines.append(f"### {names.get(slug, slug)} ({len(rs)})")
                 for r in rs[:LINKS_PER_TOPIC_PER_DAY]:
-                    lines.append(f"- [{_md(r['title'])}]({r['url']})")
+                    lines.append(f"- [{_md_label(r['title'])}]({_md_url(r['url'])})")
                 if len(rs) > LINKS_PER_TOPIC_PER_DAY:
                     lines.append(f"- … {len(rs) - LINKS_PER_TOPIC_PER_DAY} more in [{links_name}/{slug}.md](../{links_name}/{slug}.md)")
             lines.append("")
         _write(cfg.days_dir / f"{day}.md", "\n".join(lines) + "\n")
+    for p in cfg.days_dir.glob("*.md"):
+        if p.stem not in active_days and len(p.stem) == 10 and p.stem[4] == p.stem[7] == "-":
+            _remove_stale(p, f"# {p.stem}\n")
 
-    _write(cfg.root / "AGENTS.md", _agents_md(cfg, moved, links, searches, files_by_topic, links_by_topic))
+    _write(cfg.root / "AGENTS.md", _agents_md(cfg, all_topics, moved, links, searches, files_by_topic, links_by_topic))
 
 
-def _agents_md(cfg, moved, links, searches, files_by_topic, links_by_topic) -> str:
-    home = str(Path.home())
+def _agents_md(cfg, all_topics, moved, links, searches, files_by_topic, links_by_topic) -> str:
     topics_name, days_name, links_name = cfg.topics_dir.name, cfg.days_dir.name, cfg.links_dir.name
     inbox_name, private_name = cfg.inbox_dir.name, cfg.private_dir.name
     lines = [
@@ -145,7 +182,7 @@ def _agents_md(cfg, moved, links, searches, files_by_topic, links_by_topic) -> s
         f"- `{links_name}/<topic>.md` – link collection from the Chrome history, by month (only if turned on).",
         f"- `{days_name}/YYYY-MM-DD.md` – what was sorted, searched for and read on that day.",
         f"- `{inbox_name}/_index.md` – files with an unsure classification.",
-        f'- Search: `grep -ril "<term>" {str(cfg.root).replace(home, "~")} --include="*.md" --exclude-dir={private_name}`,'
+        f'- Search: `grep -ril "<term>" {short_path(cfg.root)} --include="*.md" --exclude-dir={private_name}`,'
         " then open the hits and the original files selectively.",
         "- Folders (projects, unpacked downloads) are never moved – they stay where they are (see below).",
         "",
@@ -153,10 +190,13 @@ def _agents_md(cfg, moved, links, searches, files_by_topic, links_by_topic) -> s
         "| Topic | Folder | Files | Links | Last active |",
         "|---|---|---|---|---|",
     ]
-    for t in cfg.topics:
+    known_slugs = {t.slug for t in cfg.topics}
+    for t in all_topics:
         fs, ls = files_by_topic.get(t.slug, []), links_by_topic.get(t.slug, [])
         last = max([_day(r["moved_at"]) for r in fs] + [_day(r["last_visit"]) for r in ls] or [""])
-        lines.append(f"| {t.name} | [{topics_name}/{t.slug}]({topics_name}/{t.slug}/_index.md) | {len(fs)} | {len(ls)} | {last} |")
+        folder_cell = (f"[{topics_name}/{t.slug}]({topics_name}/{t.slug}/_index.md)"
+                       if t.slug in known_slugs or fs else f"[{links_name}/{t.slug}.md]({links_name}/{t.slug}.md)")
+        lines.append(f"| {_md(t.name)} | {folder_cell} | {len(fs)} | {len(ls)} | {last} |")
     inbox = files_by_topic.get("_inbox", [])
     if inbox:
         lines.append(f"| Inbox (unsure) | [{inbox_name}]({inbox_name}/_index.md) | {len(inbox)} | – | |")
@@ -165,7 +205,7 @@ def _agents_md(cfg, moved, links, searches, files_by_topic, links_by_topic) -> s
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
     days = sorted({_day(r["moved_at"]) for r in moved} | {_day(r["last_visit"]) for r in links}
                   | {_day(r["at"]) for r in searches}, reverse=True)
-    names = {t.slug: t.name for t in cfg.topics}
+    names = {t.slug: t.name for t in all_topics}
     for day in [d for d in days if d >= since]:
         fs = [r for r in moved if _day(r["moved_at"]) == day]
         topic_counts = Counter(r["topic"] for r in links if _day(r["last_visit"]) == day)
@@ -187,5 +227,5 @@ def _agents_md(cfg, moved, links, searches, files_by_topic, links_by_topic) -> s
         except OSError:
             continue
         if subs:
-            lines.append(f"- `{str(folder).replace(home, '~')}/`: " + ", ".join(f"`{s}`" for s in subs))
+            lines.append(f"- `{short_path(folder)}/`: " + ", ".join(f"`{s}`" for s in subs))
     return "\n".join(lines) + "\n"

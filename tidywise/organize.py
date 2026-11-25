@@ -48,10 +48,11 @@ def _topics_text(cfg: Config) -> str:
     return "\n".join(f"- {t.slug}: {t.name} – {t.description}" for t in cfg.topics)
 
 
-def candidates(cfg: Config) -> list[Path]:
+def _scan_watch(cfg: Config) -> tuple[list[Path], set[Path]]:
     """Only loose files at the top level. Folders (including .app bundles, unpacked ZIPs) are never touched."""
     cutoff = time.time() - cfg.min_age_minutes * 60
-    out = []
+    out: list[Path] = []
+    blocked: set[Path] = set()
     for folder in cfg.watch:
         if not folder.is_dir():
             continue
@@ -60,6 +61,7 @@ def candidates(cfg: Config) -> list[Path]:
         except PermissionError:
             # The app looks for "No access to" in the log to show how to grant access.
             print(f"! No access to {folder} (macOS permission missing)")
+            blocked.add(folder)
             continue
         for p in entries:
             name = p.name
@@ -71,11 +73,18 @@ def candidates(cfg: Config) -> list[Path]:
                 continue
             if cfg.root in p.parents:
                 continue
-            st = p.stat()
+            try:
+                st = p.stat()
+            except OSError:
+                continue
             if max(st.st_mtime, st.st_ctime) > cutoff:
                 continue  # still too fresh – may be in use or still downloading
             out.append(p)
-    return out
+    return out, blocked
+
+
+def candidates(cfg: Config) -> list[Path]:
+    return _scan_watch(cfg)[0]
 
 
 def classify(cfg: Config, p: Path) -> dict:
@@ -93,13 +102,20 @@ def classify(cfg: Config, p: Path) -> dict:
 
 def plan(cfg: Config, store: Store, verbose: bool = True) -> list:
     """Classify all candidates and store them as 'planned'. Moves nothing."""
-    found = candidates(cfg)
+    found, blocked = _scan_watch(cfg)
     found_paths = {str(p) for p in found}
-    for row in store.planned():  # drop suggestions for files that vanished or changed
-        if row["orig_path"] not in found_paths:
+    dropped = False
+    for row in store.planned():  # drop suggestions for files that vanished or changed (keep folders we couldn't read)
+        if row["orig_path"] not in found_paths and Path(row["orig_path"]).parent not in blocked:
             store.drop_planned(row["orig_path"])
+            dropped = True
+    if dropped:
+        store.commit()
     for i, p in enumerate(found, 1):
-        st = p.stat()
+        try:
+            st = p.stat()
+        except OSError:
+            continue
         old = store.planned_for(str(p))
         if old and old["size"] == st.st_size and old["mtime"] == st.st_mtime:
             continue
@@ -110,7 +126,7 @@ def plan(cfg: Config, store: Store, verbose: bool = True) -> list:
             print(f"  [{i}/{len(found)}] {p.name}", flush=True)
         try:
             res = classify(cfg, p)
-        except llm.LLMError as e:
+        except (llm.LLMError, OSError) as e:
             print(f"  ! {p.name}: {e}")
             continue
         store.add_planned(
@@ -161,6 +177,7 @@ def apply(cfg: Config, store: Store, ids: list[int] | None = None) -> list[tuple
         src = Path(row["orig_path"])
         if not src.is_file():
             store.drop_planned(str(src))
+            store.commit()
             continue
         dst = _unique(destination(cfg, row))
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -182,11 +199,19 @@ def set_topic(cfg: Config, store: Store, file_id: int, topic: str) -> None:
         store.update_file(file_id, topic=topic, confidence=1.0)
     elif row["status"] == "moved":  # already moved: move it to the new topic
         src = Path(row["cur_path"])
-        dst = _unique(topic_folder(cfg, topic, row["mtime"]) / row["name"])
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dst))
-        store.update_file(file_id, topic=topic, confidence=1.0, cur_path=str(dst))
-        store.log_move("retopic", file_id, str(src), str(dst))
+        if not src.exists():
+            raise SystemExit(f"File no longer found at {src}")
+        target_dir = topic_folder(cfg, topic, row["mtime"])
+        if src.parent == target_dir:
+            store.update_file(file_id, topic=topic, confidence=1.0)
+        else:
+            dst = _unique(target_dir / row["name"])
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
+            store.update_file(file_id, topic=topic, confidence=1.0, cur_path=str(dst))
+            store.log_move("retopic", file_id, str(src), str(dst))
+    else:
+        raise SystemExit(f"No. {file_id} was already put back – scan again to sort it.")
     store.commit()
 
 

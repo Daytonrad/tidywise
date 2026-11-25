@@ -121,8 +121,17 @@ enum Sources {
         return try? JSONDecoder().decode(AssistantsStatus.self, from: data)
     }
 
-    static func logTail(lines: Int = 300) -> String {
-        guard let text = try? String(contentsOf: Paths.log, encoding: .utf8) else { return "" }
+    static func logTail(lines: Int = 300, maxBytes: UInt64 = 65_536) -> String {
+        guard let fh = try? FileHandle(forReadingFrom: Paths.log) else { return "" }
+        defer { try? fh.close() }
+        let end = (try? fh.seekToEnd()) ?? 0
+        let start = end > maxBytes ? end - maxBytes : 0
+        try? fh.seek(toOffset: start)
+        let data = (try? fh.readToEnd()) ?? Data()
+        var text = String(decoding: data, as: UTF8.self)
+        if start > 0, let nl = text.firstIndex(of: "\n") {
+            text = String(text[text.index(after: nl)...])
+        }
         return text.split(separator: "\n", omittingEmptySubsequences: false).suffix(lines).joined(separator: "\n")
     }
 }

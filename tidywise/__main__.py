@@ -10,12 +10,12 @@ from datetime import datetime
 from pathlib import Path
 
 from . import assistants, chrome, config, llm, mcp, organize, render, service, telemetry
-from .config import CONFIG_PATH, load
+from .config import CONFIG_PATH, load, short_path
 from .store import Store
 
 
 def _short(p: str) -> str:
-    return p.replace(str(Path.home()), "~")
+    return short_path(p)
 
 
 def print_plan(cfg, rows) -> None:
@@ -125,9 +125,10 @@ def cmd_status(cfg, store, args):
 
 def _parse_value(key: str, value: str):
     """Convert text from the command line to the right type – going by the type of the current value."""
-    current = config.to_dict(load()).get(key)
-    if key not in config.to_dict(load()) or key in ("exists", "path", "topics"):
+    current_data = config.to_dict(load())
+    if key not in current_data or key in ("exists", "path", "topics", "folder_names"):
         sys.exit(f"Unknown setting “{key}”. Show all: tidywise config")
+    current = current_data.get(key)
     if isinstance(current, bool):
         if value.lower() not in ("true", "false", "on", "off", "1", "0"):
             sys.exit(f"“{key}” is on or off: true / false")
@@ -203,7 +204,10 @@ def cmd_mcp(args) -> None:
                 sys.exit(f"Which assistant? tidywise mcp {args.action} <{'|'.join(c.id for c in assistants.CLIENTS)}>")
             if args.action == "add":
                 message = assistants.connect(args.client)
-                if config.exists() and not load().mcp_enabled:
+                if not config.exists():  # writing a config now would make the app skip its setup
+                    message += ("\nTidywise isn't set up yet – searching is switched on when you finish setup in the app"
+                                " (without the app: tidywise config set mcp_enabled true).")
+                elif not load().mcp_enabled:
                     config.update({"mcp_enabled": True})  # connecting an assistant means: yes, let it search
             else:
                 message = assistants.disconnect(args.client)
@@ -240,11 +244,23 @@ def run_lock(cfg, wait: bool):
     return lock
 
 
+def _trim_log(max_bytes: int = 2_000_000, keep_bytes: int = 200_000) -> None:
+    """Keep agent.log bounded so long-running installs don't grow the file forever."""
+    try:
+        if service.LOG.exists() and service.LOG.stat().st_size > max_bytes:
+            data = service.LOG.read_bytes()[-keep_bytes:]
+            nl = data.find(b"\n")
+            service.LOG.write_bytes(data[nl + 1:] if nl != -1 else data)
+    except OSError:
+        pass
+
+
 def cmd_agent(cfg, store, args):
     """One run, triggered by the app through launchd (files + history if enabled + index). Never runs twice at once."""
     lock = run_lock(cfg, wait=False)  # something already running (service or CLI)? Then skip this time
     if lock is None:
         return
+    _trim_log()
     print(f"--- {datetime.now():%Y-%m-%d %H:%M:%S}")
     ok, msg = llm.available(cfg)
     if not ok:

@@ -18,7 +18,7 @@ fail() { print -P "%F{red}✗%f $1" >&2; exit 1; }
 
 # --- Find Python ≥ 3.12 (the Python that ships with macOS is too old) ------------------------------
 PY=""
-for cand in python3.14 python3.13 python3.12 python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+for cand in python3.15 python3.14 python3.13 python3.12 python3 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
   if command -v "$cand" >/dev/null 2>&1 && "$cand" -c 'import sys; sys.exit(sys.version_info < (3, 12))' 2>/dev/null; then
     PY="$(command -v "$cand")"; break
   fi

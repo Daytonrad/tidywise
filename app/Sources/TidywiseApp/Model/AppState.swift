@@ -88,6 +88,8 @@ final class AppState {
     var configLoaded = false
     /// Saves in progress – until they finish, the configuration is not overwritten from disk.
     var pendingSaves = 0
+    /// “Done” in setup was pressed and the last checks before saving are running.
+    var finishingSetup = false
     var saveChain: Task<Void, Never>?
     var files: [FileItem] = []
     var links: [LinkItem] = []
@@ -131,8 +133,10 @@ final class AppState {
     /// How often the app kicks off a run while it is open.
     var runInterval: TimeInterval { TimeInterval(max(1, config.intervalMinutes) * 60) }
     /// “every 15 minutes” / “every hour”
-    var intervalText: String {
-        switch config.intervalMinutes {
+    var intervalText: String { Self.intervalText(minutes: config.intervalMinutes) }
+
+    static func intervalText(minutes: Int) -> String {
+        switch minutes {
         case 60: "every hour"
         case let m where m > 60 && m % 60 == 0: "every \(m / 60) hours"
         case let m: "every \(m) minutes"
@@ -152,12 +156,19 @@ final class AppState {
     /// Setup replaces the main window until a configuration exists.
     var showSetup: Bool { setupRequested || (configLoaded && (!cliInstalled || !config.exists)) }
     /// Is the chosen model on disk? Ollama treats “name” and “name:latest” as the same.
+    nonisolated static func modelMatches(_ a: String, _ b: String) -> Bool {
+        let normalize = { (s: String) in s.contains(":") ? s : s + ":latest" }
+        return normalize(a) == normalize(b)
+    }
+
     var modelInstalled: Bool { isInstalled(config.model) }
     func isInstalled(_ tag: String) -> Bool {
-        installedModels.contains { $0.name == tag || $0.name == tag + ":latest" }
+        installedModels.contains { Self.modelMatches($0.name, tag) }
     }
     /// May something that needs the AI be started right now?
     var canRunAI: Bool { aiEnabled && !stopping && !isBusy && !showSetup }
+    /// Ready to invoke Ollama right now (AI on, Ollama reachable, model on disk).
+    var canScan: Bool { canRunAI && ollamaUp && modelInstalled }
     var reviewCount: Int { planned.count + inbox.count }
     var movedThisWeek: Int {
         let limit = Date.now.addingTimeInterval(-7 * 24 * 3600)
@@ -199,7 +210,7 @@ final class AppState {
         case .ok: DS.ok
         }
     }
-    var modelLoaded: LoadedModel? { loadedModels.first { $0.name == config.model } ?? loadedModels.first }
+    var modelLoaded: LoadedModel? { loadedModels.first { Self.modelMatches($0.name, config.model) } ?? loadedModels.first }
     var modelRAM: Int64 { processes.reduce(0) { $0 + $1.rssBytes } }
     var lastRun: Date? { Format.date(meta["agent_last_run"]) }
     /// Tokens/s of the most recent calls, oldest first (for sparklines).
@@ -235,20 +246,30 @@ final class AppState {
         return v.isEmpty ? nil : v.reduce(0, +) / Double(v.count)
     }
 
-    /// Only blocked if the last run failed and nothing from the history has arrived since.
+    /// Output of the most recent background run (each run starts with a `--- YYYY-MM-DD …` line).
+    private var lastLogBlock: String {
+        if let range = logTail.range(of: "\n--- ", options: .backwards) {
+            return String(logTail[range.upperBound...])
+        }
+        return logTail
+    }
+
+    /// Blocked if the last run hit a Chrome permission error and no successful Chrome sync happened since.
     var chromeBlocked: Bool {
         if activity?.isAlive == true && activity?.task == "Sorting history" { return false }
         guard config.linksEnabled else { return false }
         if let lastSync = Format.date(meta["chrome_last_run"]), let lastRun = lastRun, lastSync >= lastRun.addingTimeInterval(-60) {
             return false
         }
-        let lastBlock = logTail.components(separatedBy: "--- ").last ?? ""
-        return lastBlock.contains("Operation not permitted") && links.isEmpty
+        // The run logs “Chrome history: [Errno 1] Operation not permitted: …” – other files' errors don't count.
+        return lastLogBlock.split(separator: "\n").contains {
+            $0.contains("Chrome history:") && $0.contains("Operation not permitted")
+        }
     }
 
     /// macOS denied the background service access to a folder during the last run.
     var foldersBlocked: Bool {
-        (logTail.components(separatedBy: "--- ").last ?? "").contains("No access to")
+        lastLogBlock.contains("No access to")
     }
     var accessBlocked: Bool { chromeBlocked || foldersBlocked }
 
@@ -315,9 +336,9 @@ final class AppState {
     func refreshData() async {
         let live = Snapshot.directory == nil
         let (snap, svc, log, cfg) = await Task.detached {
-            // Downloaded app: (re)write the launcher – also picks up a Python that was installed in the meantime.
-            if Backend.isBundled, live, Backend.prepare(), Backend.serviceNeedsUpdate {
-                _ = Shell.run(Backend.cli.path, ["service", "install"])
+            // Downloaded app: (re)write the launcher and refresh launchd if the app moved or Python changed.
+            if Backend.isBundled, live, let python = Backend.prepare() {
+                Backend.refreshServiceIfNeeded(python: python)
             }
             return (Sources.readDatabase(), Sources.serviceStatus(), Sources.logTail(), ConfigStore.load())
         }.value
@@ -464,7 +485,7 @@ final class AppState {
 
         let config = ConfigStore.last
         let names = Ollama.loadedModelNamesSync(baseURL: config.ollamaURL, timeout: 2)
-        for name in names where name == config.model || names.count == 1 {
+        for name in names where Self.modelMatches(name, config.model) || names.count == 1 {
             Ollama.unloadSync(baseURL: config.ollamaURL, model: name, timeout: timeout)
         }
     }
@@ -482,7 +503,15 @@ final class AppState {
         }
     }
 
-    func openRoot() { NSWorkspace.shared.open(config.root) }
+    func openRoot() {
+        guard FileManager.default.fileExists(atPath: config.rootPath) else {
+            result = CommandResult(title: "Destination folder",
+                                   output: "“\(Paths.short(config.rootPath))” hasn't been created yet – it appears as soon as Tidywise sorts the first file.",
+                                   failed: false)
+            return
+        }
+        NSWorkspace.shared.open(config.root)
+    }
     func reveal(_ file: FileItem) { NSWorkspace.shared.activateFileViewerSelecting([file.currentURL]) }
     func open(_ file: FileItem) { NSWorkspace.shared.open(file.currentURL) }
 

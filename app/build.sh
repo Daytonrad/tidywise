@@ -14,7 +14,14 @@ APP="$BUILD/Tidywise.app"
 VERSION=$(grep -m1 '^version' ../pyproject.toml | sed -E 's/.*"(.*)".*/\1/')
 
 echo "→ Compiling"
-swift build -c release 2>&1 | grep -E "error|warning: |Compiling|Build complete" || true
+BUILD_LOG="$(mktemp)"
+trap 'rm -f "$BUILD_LOG"' EXIT
+if ! swift build -c release >"$BUILD_LOG" 2>&1; then
+  cat "$BUILD_LOG" >&2
+  echo "Build failed" >&2
+  exit 1
+fi
+grep -E "warning: |Compiling|Build complete" "$BUILD_LOG" || true
 BIN="$(swift build -c release --show-bin-path)/TidywiseApp"
 [[ -x "$BIN" ]] || { echo "Build failed"; exit 1; }
 

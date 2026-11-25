@@ -19,7 +19,7 @@ struct TidywiseApp: App {
         .defaultSize(width: 1220, height: 800)
         .commands {
             CommandGroup(after: .newItem) {
-                Button("Check for new files") { state.scan() }.keyboardShortcut("r").disabled(!state.canRunAI || !state.modelInstalled)
+                Button("Check for new files") { state.scan() }.keyboardShortcut("r").disabled(!state.canScan)
                 Button(state.aiEnabled ? "Turn AI off" : "Turn AI on") { state.setAIEnabled(!state.aiEnabled) }
                     .keyboardShortcut("k", modifiers: [.command, .shift])
                 Button("Open Tidywise folder") { state.openRoot() }.keyboardShortcut("o", modifiers: [.command, .shift])
@@ -28,7 +28,8 @@ struct TidywiseApp: App {
                 Button("Settings …") { state.page = .settings }.keyboardShortcut(",").disabled(state.showSetup)
             }
             CommandGroup(before: .sidebar) {
-                ForEach(Array(Page.allCases.enumerated()), id: \.element) { index, page in
+                let visiblePages = Page.allCases.filter { $0 != .links || state.config.linksEnabled || !state.links.isEmpty }
+                ForEach(Array(visiblePages.enumerated()), id: \.element) { index, page in
                     Button(page.rawValue) { state.page = page }
                         .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
                         .disabled(state.showSetup)
@@ -143,14 +144,14 @@ struct ContentView: View {
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
                     Spacer()
-                    AIToggle()
+                    AIToggle().controlSize(.small)
                     Button { state.openRoot() } label: { Label("Open folder", systemImage: "folder") }
                         .labelStyle(.titleAndIcon)
                         .help("Open the folder with all sorted files in Finder (⇧⌘O)")
                     Button { state.scan() } label: { Label("Check for new files", systemImage: "arrow.clockwise") }
                         .labelStyle(.titleAndIcon)
                         .help("Check \(state.config.watchNames) for loose files now (⌘R)")
-                        .disabled(!state.canRunAI || !state.modelInstalled)
+                        .disabled(!state.canScan)
                 }
             }
         }
@@ -314,11 +315,14 @@ struct AIToggle: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
-        Toggle(isOn: Binding(get: { state.aiEnabled }, set: { state.setAIEnabled($0) })) {
+        HStack(spacing: 5) {
             Text("AI")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(state.aiEnabled ? .primary : .secondary)
+            Toggle("AI", isOn: Binding(get: { state.aiEnabled }, set: { state.setAIEnabled($0) }))
+                .labelsHidden()
+                .toggleStyle(.switch)
         }
-        .toggleStyle(.switch)
-        .controlSize(.small)
         .disabled(state.stopping)
         .help(state.aiEnabled
               ? "Turn AI off: stop running work and free the memory right away (⇧⌘K)"

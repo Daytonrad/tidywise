@@ -42,10 +42,10 @@ enum Backend {
     }
 
     /// Downloaded app only: writes the launcher if it is missing or out of date (app moved, Python updated).
-    /// Returns true if it was written. Synchronous – call from the background.
+    /// Returns the chosen Python path (or nil if Python 3.12+ is missing). Synchronous – call from the background.
     @discardableResult
-    static func prepare() -> Bool {
-        guard let sources = bundledSources, let python = findPython() else { return false }
+    static func prepare() -> String? {
+        guard let sources = bundledSources, let python = findPython() else { return nil }
         func quoted(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
         let script = """
         #!/bin/sh
@@ -57,26 +57,46 @@ enum Backend {
         exec \(quoted(python)) -m tidywise "$@"
 
         """
-        if (try? String(contentsOf: launcher, encoding: .utf8)) == script, installed { return false }
+        if (try? String(contentsOf: launcher, encoding: .utf8)) == script, installed { return python }
         do {
             try FileManager.default.createDirectory(at: launcher.deletingLastPathComponent(), withIntermediateDirectories: true)
             try script.write(to: launcher, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
-            return true
+            return python
         } catch {
-            return false
+            return nil
         }
     }
 
-    /// The background service remembers where the Python sources are. If the downloaded app has moved since the
-    /// service was set up, it has to be set up again. Never touches a service that was set up from source.
-    static var serviceNeedsUpdate: Bool {
+    /// The background service remembers where the Python sources and interpreter are. If the downloaded app
+    /// moved or Python was updated since the service was set up, it has to be set up again.
+    /// Never touches a service that was set up from source.
+    /// Sets the service up again when `serviceNeedsUpdate` says so – at most once per app start for the same
+    /// sources and Python, so a mismatch that `service install` can't fix doesn't restart launchd every few seconds.
+    static func refreshServiceIfNeeded(python: String) {
+        guard let sources = bundledSources else { return }
+        let key = sources.path + "\n" + python
+        refreshLock.lock()
+        defer { refreshLock.unlock() }
+        guard refreshedFor != key, serviceNeedsUpdate(python: python) else { return }
+        refreshedFor = key
+        _ = Shell.run(cli.path, ["service", "install"])
+    }
+    private static let refreshLock = NSLock()
+    nonisolated(unsafe) private static var refreshedFor: String?
+
+    static func serviceNeedsUpdate(python: String) -> Bool {
         guard let sources = bundledSources,
               ProcessInfo.processInfo.environment["TIDYWISE_STATE_DIR"] == nil,
               let data = try? Data(contentsOf: Paths.plist),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let env = plist["EnvironmentVariables"] as? [String: String],
               let recorded = env["PYTHONPATH"] else { return false }
-        return recorded != sources.path
+        if recorded != sources.path { return true }
+        guard let args = plist["ProgramArguments"] as? [String], let recordedPython = args.first else { return true }
+        if !FileManager.default.isExecutableFile(atPath: recordedPython) { return true }
+        let a = URL(fileURLWithPath: recordedPython).resolvingSymlinksInPath().path
+        let b = URL(fileURLWithPath: python).resolvingSymlinksInPath().path
+        return a != b
     }
 }

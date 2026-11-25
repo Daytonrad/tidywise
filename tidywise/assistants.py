@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -83,7 +84,9 @@ class ClaudeCode(Client):
         return [cli, "mcp", "add", "--scope", "user", NAME, "--", *command]
 
     def remove(self, cli: str) -> None:
-        _run([cli, "mcp", "remove", "--scope", "user", NAME])
+        r = _run([cli, "mcp", "remove", "--scope", "user", NAME])
+        if r.returncode != 0:
+            raise AssistantError(f"{self.title} could not remove the server: {(r.stderr or r.stdout).strip()[:300]}")
 
 
 class Codex(Client):
@@ -99,7 +102,15 @@ class Codex(Client):
         return [cli, "mcp", "add", NAME, "--", *command]
 
     def remove(self, cli: str) -> None:
-        _run([cli, "mcp", "remove", NAME])
+        r = _run([cli, "mcp", "remove", NAME])
+        if r.returncode != 0:
+            raise AssistantError(f"{self.title} could not remove the server: {(r.stderr or r.stdout).strip()[:300]}")
+
+
+def _strip_jsonc_comments(text: str) -> str:
+    """Remove // and /* */ comments outside string literals so JSONC can be inspected safely."""
+    pattern = re.compile(r'"(?:\\.|[^"\\])*"|//[^\n]*|/\*.*?\*/', re.DOTALL)
+    return pattern.sub(lambda m: m.group(0) if m.group(0).startswith('"') else "", text)
 
 
 class OpenCode(Client):
@@ -109,15 +120,27 @@ class OpenCode(Client):
         mcp = data.get("mcp") or {}
         return mcp.get("servers") if isinstance(mcp.get("servers"), dict) else mcp  # newer and older layout
 
-    def connected(self) -> bool:
+    def _matched_config(self) -> Path | None:
         for p in self.configs:
             data = _json(p)
             if data:
                 if NAME in self._servers(data):
-                    return True
-            elif f'"{NAME}"' in _text(p):  # JSON with comments can't be parsed here – a plain look is the best we can do
-                return True
-        return False
+                    return p
+            else:
+                stripped = _strip_jsonc_comments(_text(p))
+                try:
+                    parsed = json.loads(re.sub(r",(\s*[}\]])", r"\1", stripped)) if stripped.strip() else {}
+                except ValueError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    if NAME in self._servers(parsed):
+                        return p
+                elif f'"{NAME}"' in stripped:
+                    return p
+        return None
+
+    def connected(self) -> bool:
+        return self._matched_config() is not None
 
     def add_args(self, cli: str, command: list[str]) -> list[str]:
         return [cli, "mcp", "add", "--global", NAME, "--", *command]
@@ -131,8 +154,8 @@ class OpenCode(Client):
                 del servers[NAME]
                 p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
                 return
-        if self.connected():
-            raise AssistantError(f"Please remove “{NAME}” from the “mcp” section of {self.configs[0]} by hand.")
+        if (matched := self._matched_config()) is not None:
+            raise AssistantError(f"Please remove “{NAME}” from the “mcp” section of {matched} by hand.")
 
 
 def _text(path: Path) -> str:

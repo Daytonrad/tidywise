@@ -102,8 +102,7 @@ def _db(cfg: config.Config) -> sqlite3.Connection | None:
 
 
 def _short(path: str | None) -> str:
-    home = str(Path.home())
-    return ("~" + path[len(home):]) if path and path.startswith(home) else (path or "")
+    return config.short_path(path)
 
 
 def _limit(args: dict, default: int) -> int:
@@ -119,8 +118,12 @@ def _like(columns: str, words: list[str]) -> tuple[str, list[str]]:
         "%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%" for w in words]
 
 
+def _is_inbox(cur_path: str | None) -> bool:
+    return bool(cur_path) and Path(cur_path).parent.name == "_inbox"
+
+
 def _file_line(r: sqlite3.Row) -> str:
-    inbox = Path(r["cur_path"] or "").parent.name == "_inbox"
+    inbox = _is_inbox(r["cur_path"])
     keywords = f" [{r['keywords']}]" if r["keywords"] else ""
     return (f"#{r['id']} {'inbox' if inbox else r['topic']} · {(r['moved_at'] or '')[:10]} · {r['name']} — "
             f"{r['summary']}{keywords} → {_short(r['cur_path'])}")
@@ -146,12 +149,14 @@ def tool_search(cfg: config.Config, con: sqlite3.Connection, args: dict) -> str:
     out: list[str] = []
     if kind in ("all", "files"):
         where, params = _like("name || ' ' || coalesce(summary,'') || ' ' || coalesce(keywords,'')", words)
-        if topic:
-            where, params = where + " AND topic = ?", params + [topic]
+        if topic in ("_inbox", "inbox"):
+            where += " AND coalesce(cur_path,'') LIKE '%/_inbox/%'"
+        elif topic:
+            where, params = where + " AND topic = ? AND coalesce(cur_path,'') NOT LIKE '%/_inbox/%'", params + [topic]
         rows = con.execute(f"SELECT * FROM files WHERE status='moved' AND {where} ORDER BY moved_at DESC LIMIT ?",
                            (*params, limit + 1)).fetchall()
         out += _section("Files", [_file_line(r) for r in rows], limit)
-    if kind in ("all", "links"):
+    if kind in ("all", "links") and topic not in ("_inbox", "inbox"):
         where, params = _like("coalesce(title,'') || ' ' || coalesce(domain,'') || ' ' || url", words)
         if topic:
             where, params = where + " AND topic = ?", params + [topic]
@@ -185,12 +190,23 @@ def tool_recent(cfg: config.Config, con: sqlite3.Connection, args: dict) -> str:
 
 
 def tool_topics(cfg: config.Config, con: sqlite3.Connection, args: dict) -> str:
-    files = dict(con.execute("SELECT topic, count(*) FROM files WHERE status='moved' GROUP BY topic").fetchall())
-    links = dict(con.execute("SELECT topic, count(*) FROM links GROUP BY topic").fetchall())
+    files: dict[str, int] = {}
+    inbox_count = 0
+    for r in con.execute("SELECT topic, cur_path FROM files WHERE status='moved'").fetchall():
+        if _is_inbox(r["cur_path"]):
+            inbox_count += 1
+        elif r["topic"]:
+            files[r["topic"]] = files.get(r["topic"], 0) + 1
+    links = dict(con.execute("SELECT topic, count(*) FROM links WHERE topic IS NOT NULL GROUP BY topic").fetchall())
     lines = [f"Archive: {_short(str(cfg.root))} (topic folders in {cfg.topics_dir.name}/, "
              f"never open {cfg.private_dir.name}/)"]
+    known = {t.slug for t in cfg.topics}
     for t in cfg.topics:
         lines.append(f"{t.slug} · {t.name} — {files.get(t.slug, 0)} files, {links.get(t.slug, 0)} links")
+    for slug in sorted((set(files) | set(links)) - known):
+        lines.append(f"{slug} · {slug} — {files.get(slug, 0)} files, {links.get(slug, 0)} links")
+    if inbox_count:
+        lines.append(f"_inbox · Inbox — {inbox_count} files")
     return "\n".join(lines)
 
 

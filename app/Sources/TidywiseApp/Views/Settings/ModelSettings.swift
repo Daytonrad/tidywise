@@ -148,10 +148,11 @@ struct ModelPicker: View {
     // MARK: Other models
 
     private var others: some View {
-        let known = Set(ModelCatalog.all.map(\.tag))
-        let extra = state.installedModels.filter { !known.contains($0.name) }
+        let known = ModelCatalog.all.map(\.tag)
+        let isKnown = { (tag: String) in known.contains { AppState.modelMatches($0, tag) } }
+        let extra = state.installedModels.filter { !isKnown($0.name) }
         return Collapsible("Another model", detail: otherDetail(extra.count), systemImage: "shippingbox",
-                           startsOpen: !known.contains(config.model)) {
+                           startsOpen: !isKnown(config.model)) {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(extra) { m in
                     HStack(spacing: 10) {
@@ -159,10 +160,10 @@ struct ModelPicker: View {
                         Text(m.name).font(.system(.callout, design: .monospaced))
                         Text(Format.fileSize(m.size)).font(.caption).foregroundStyle(.secondary)
                         Spacer()
-                        control(m.name, size: nil, active: config.model == m.name, installed: true)
+                        control(m.name, size: nil, active: AppState.modelMatches(config.model, m.name), installed: true)
                     }
                 }
-                if !known.contains(config.model), !state.isInstalled(config.model) {
+                if !isKnown(config.model), !state.isInstalled(config.model) {
                     HStack(spacing: 10) {
                         Image(systemName: "cpu").foregroundStyle(.secondary).frame(width: 20)
                         Text(config.model).font(.system(.callout, design: .monospaced))
@@ -178,7 +179,8 @@ struct ModelPicker: View {
                     Button("Download", action: loadCustom)
                         .disabled(custom.trimmingCharacters(in: .whitespaces).isEmpty || !state.ollamaUp || state.downloadTask != nil)
                 }
-                if let d = state.download, !d.failed, !known.contains(d.model), !extra.contains(where: { $0.name == d.model }), d.model != config.model {
+                if let d = state.download, !d.failed, !isKnown(d.model),
+                   !extra.contains(where: { AppState.modelMatches($0.name, d.model) }), !AppState.modelMatches(d.model, config.model) {
                     control(d.model, size: nil, active: false, installed: false)
                 }
                 Text("Any model from the Ollama library works. Ideally one that understands images – then Tidywise also recognizes photos and scanned PDFs.")

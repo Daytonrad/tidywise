@@ -84,7 +84,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--split", default="dev", choices=["dev", "test", "all"])
     ap.add_argument("--no-edge", action="store_true", help="leave out the edge cases")
-    ap.add_argument("--fmt", default="items", choices=chrome.FORMATS)
+    ap.add_argument("--fmt", default=chrome.FORMAT, choices=chrome.FORMATS)
     ap.add_argument("--batch", type=int, default=40)
     ap.add_argument("--parallel", type=int, default=1)
     ap.add_argument("--repeat", type=int, default=1)
@@ -109,7 +109,9 @@ def main() -> None:
         print(f"{args.fmt:<12} batch {args.batch:<3} parallel {args.parallel}  |  {parts}  |  total {right / len(rows):.1%}"
               f"  |  {secs:5.1f} s = {len(rows) / secs:4.1f} Links/s  |  {tok[0] / len(rows):.1f} output tokens/link"
               f"{'  | errors: ' + str(tok[3]) if tok[3] else ''}", flush=True)
-        with open(cfg.state_dir / "bench" / "results.jsonl", "a") as f:
+        results_path = cfg.state_dir / "bench" / "results.jsonl"
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(results_path, "a") as f:
             f.write(json.dumps({"at": since, "split": args.split, "fmt": args.fmt, "batch": args.batch,
                                 "parallel": args.parallel, "score": sc, "seconds": secs,
                                 "out_tokens": tok[0], "prompt_tokens": tok[1], "calls": tok[2],
