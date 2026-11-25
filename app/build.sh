@@ -62,6 +62,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
     <key>NSHighResolutionCapable</key><true/>
+    <key>LSUIElement</key><true/>
     <key>NSDownloadsFolderUsageDescription</key><string>Tidywise sorts loose files from the folders you chose into topic folders.</string>
     <key>NSDocumentsFolderUsageDescription</key><string>Tidywise sorts loose files from the folders you chose into topic folders.</string>
     <key>NSDesktopFolderUsageDescription</key><string>Tidywise sorts loose files from the folders you chose into topic folders.</string>

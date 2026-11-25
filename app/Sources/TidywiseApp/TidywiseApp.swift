@@ -12,12 +12,17 @@ struct TidywiseApp: App {
                 .environment(state)
                 .tint(DS.accent)
                 .frame(minWidth: 1000, minHeight: 660)
+                .background(MainWindowAccessor())
                 .onAppear {
                     if Snapshot.directory != nil { Snapshot.run(state) } else { state.start() }
                 }
         }
         .defaultSize(width: 1220, height: 800)
+        .menuBarAppLaunch()
         .commands {
+            CommandGroup(replacing: .windowSize) {
+                Button("Minimize to Menu Bar") { MainWindow.hide() }.keyboardShortcut("m")
+            }
             CommandGroup(after: .newItem) {
                 Button("Check for new files") { state.scan() }.keyboardShortcut("r").disabled(!state.canScan)
                 Button(state.aiEnabled ? "Turn AI off" : "Turn AI on") { state.setAIEnabled(!state.aiEnabled) }
@@ -52,6 +57,7 @@ struct TidywiseApp: App {
 
 struct MenuBarLabel: View {
     @Environment(AppState.self) private var state
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 4) {
@@ -62,14 +68,92 @@ struct MenuBarLabel: View {
                 Text("\(state.reviewCount)").monospacedDigit()
             }
         }
+        // The icon is there from launch on – even when the main window stays closed.
+        .onAppear {
+            MainWindow.open = { openWindow(id: "main") }
+            if Snapshot.directory != nil { openWindow(id: "main") } else { state.start() }
+        }
+        .onChange(of: state.showSetup) { _, setup in
+            if setup { MainWindow.show() }  // first start: setup needs the window
+        }
+    }
+}
+
+extension Scene {
+    /// Tidywise lives in the menu bar: the main window only opens by itself when setup is needed (see MenuBarLabel).
+    /// macOS 14 can't hold it back – there it opens at launch as before and can be put away right after.
+    func menuBarAppLaunch() -> some Scene {
+        if #available(macOS 15, *) {
+            return defaultLaunchBehavior(.suppressed)
+        } else {
+            return self
+        }
+    }
+}
+
+/// The main window comes and goes, the app stays in the menu bar (no Dock icon, see LSUIElement in build.sh).
+@MainActor
+enum MainWindow {
+    fileprivate static weak var window: NSWindow?
+    /// Put away with the yellow button / ⌘M: still there, just not on screen.
+    private static var hidden = false
+    /// SwiftUI's `openWindow`, handed over by a view that has it (the menu bar icon).
+    static var open: (() -> Void)?
+
+    static func show() {
+        NSApp.activate(ignoringOtherApps: true)
+        if hidden, let window {
+            hidden = false
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            hidden = false
+            open?()
+        }
+    }
+
+    static func hide() {
+        guard let window, window.isVisible else { return }
+        hidden = true
+        window.orderOut(nil)
+        NSApp.deactivate()  // hand the keyboard back to the app that was in front before
+    }
+
+    fileprivate static func attach(_ window: NSWindow?) {
+        guard let window, window !== self.window else { return }
+        self.window = window
+        hidden = false
+        // The yellow button puts the window away into the menu bar instead of the Dock (there is no Dock icon).
+        if let button = window.standardWindowButton(.miniaturizeButton) {
+            button.target = MinimizeTarget.shared
+            button.action = #selector(MinimizeTarget.minimize(_:))
+        }
+    }
+}
+
+private final class MinimizeTarget: NSObject {
+    static let shared = MinimizeTarget()
+    @MainActor @objc func minimize(_ sender: Any?) { MainWindow.hide() }
+}
+
+/// Finds the NSWindow behind the SwiftUI main window.
+private struct MainWindowAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { MainWindow.attach(view.window) }
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { MainWindow.attach(view.window) }
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
-        guard Snapshot.directory == nil else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        guard Snapshot.directory == nil else {
+            NSApp.setActivationPolicy(.regular)  // screenshots need a normal window in front
+            return
+        }
+        NSApp.setActivationPolicy(.accessory)  // menu bar only – no Dock icon, not in ⌘Tab
         // The MCP server for AI assistants only answers while this file points at a running app.
         try? FileManager.default.createDirectory(at: Paths.stateDir, withIntermediateDirectories: true)
         try? "\(ProcessInfo.processInfo.processIdentifier)".write(to: Paths.appPID, atomically: true, encoding: .utf8)
@@ -84,6 +168,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Window closed → the app keeps running in the menu bar
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    // Opened again from Finder, Spotlight or Launchpad while it is running → show the window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainWindow.show()
+        return false
+    }
 }
 
 // MARK: - Main window

@@ -3,7 +3,6 @@ import SwiftUI
 /// The small window in the menu bar: state, the obvious next step, two key figures.
 struct MenuBarView: View {
     @Environment(AppState.self) private var state
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -122,8 +121,7 @@ struct MenuBarView: View {
 
     private func show(_ page: Page) {
         state.page = page
-        openWindow(id: "main")
-        NSApp.activate(ignoringOtherApps: true)
+        MainWindow.show()
     }
 
     private func tile(_ value: String, _ label: String) -> some View {
