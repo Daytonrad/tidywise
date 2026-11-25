@@ -202,6 +202,8 @@ What you should know:
 There is also a Claude Code skill in `skill/` (linked to `~/.claude/skills/tidywise` by `install.sh`) that
 teaches Claude how to read the archive's files directly.
 
+Listed on [Glama](https://glama.ai/mcp/servers/floorianmb/tidywise).
+
 ## How the project is organised
 
 Two parts, one interface: the app reads the database and calls the CLI for every change.
