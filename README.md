@@ -18,6 +18,14 @@ clear cases on its own). No account, no cloud, and every move can be undone.
 - **Searchable for AI assistants:** connect Claude Code, Codex or OpenCode with one click (or anything else
   that speaks MCP) and ask "what did I save about …?". Read-only, and only while the app is open.
 
+```text
+You:      Find my 2025 service charges statement and my Lisbon boarding pass.
+
+tidywise: Files:
+          #14 finance · 2026-11-18 · Service_charges_2025.pdf — Annual statement of service charges for 2025 with an additional payment. → ~/Downloads/Tidywise/Topics/finance/Service_charges_2025.pdf
+          #11 travel · 2026-11-12 · Flight_LIS_boarding_pass.pdf — Boarding pass for the flight to Lisbon. → ~/Downloads/Tidywise/Topics/travel/Flight_LIS_boarding_pass.pdf
+```
+
 ## Install
 
 Tidywise needs a Mac with Apple silicon and macOS 14 or newer (8 GB of memory or more), plus two free programs
@@ -26,11 +34,20 @@ it doesn't ship itself:
 | What | Why | How to get it |
 |---|---|---|
 | Python 3.12+ | reads and moves the files | [python.org](https://www.python.org/downloads/macos/) or `brew install python` |
-| [Ollama](https://ollama.com/download) | runs the AI model | the app helps you during setup |
+| [Ollama](https://ollama.com/download) | runs the AI model | `brew install ollama` or the app helps during setup |
 
 The app tells you if one of them is missing.
 
-### Download the app
+### Homebrew
+
+```bash
+brew install --cask floorianmb/tap/tidywise
+```
+
+Because the app is not signed with a paid Apple developer certificate yet, add `--no-quarantine` to skip the
+one-time Gatekeeper prompt (or allow it once under *System Settings → Privacy & Security → Open Anyway*).
+
+### Or download the app
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/floorianmb/tidywise/main/get-tidywise.sh | zsh
