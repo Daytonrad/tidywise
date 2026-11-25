@@ -1,6 +1,6 @@
 [project]
 name = "tidywise"
-version = "0.4.0"
+version = "0.4.1"
 description = "Sort loose files on a Mac with a local AI model (Ollama) and make them findable for agents"
 readme = "README.md"
 license = "MIT"
